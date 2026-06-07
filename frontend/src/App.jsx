@@ -5,6 +5,7 @@ import ProjectDetail from "./pages/ProjectDetail";
 import Deployments from "./pages/Deployments";
 import DeploymentDetail from "./pages/DeploymentDetail";
 import NewDeployment from "./pages/NewDeployment";
+import Secrets from "./pages/Secrets";
 import NotFound from "./pages/NotFound";
 
 export default function App() {
@@ -14,6 +15,7 @@ export default function App() {
       <Route path="/projects" element={<Projects />} />
       <Route path="/projects/:id" element={<ProjectDetail />} />
       <Route path="/projects/:id/deploy" element={<NewDeployment />} />
+      <Route path="/projects/:id/secrets" element={<Secrets />} />
       <Route path="/deployments" element={<Deployments />} />
       <Route path="/deployments/:id" element={<DeploymentDetail />} />
       <Route path="*" element={<NotFound />} />

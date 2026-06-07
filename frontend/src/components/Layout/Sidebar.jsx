@@ -7,6 +7,7 @@ import DashboardIcon from "@mui/icons-material/Dashboard";
 import FolderIcon from "@mui/icons-material/Folder";
 import RocketLaunchIcon from "@mui/icons-material/RocketLaunch";
 import StorageIcon from "@mui/icons-material/Storage";
+import LockIcon from "@mui/icons-material/Lock";
 
 const DRAWER_WIDTH = 240;
 
@@ -15,6 +16,7 @@ const NAV_ITEMS = [
   { label: "Projects", icon: <FolderIcon />, path: "/projects" },
   { label: "Deployments", icon: <RocketLaunchIcon />, path: "/deployments" },
   { label: "Resources", icon: <StorageIcon />, path: "/resources" },
+  { label: "Secrets", icon: <LockIcon />, path: "/secrets" },
 ];
 
 export default function Sidebar() {

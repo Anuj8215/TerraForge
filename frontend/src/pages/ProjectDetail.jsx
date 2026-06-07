@@ -7,6 +7,7 @@ import {
 } from "@mui/material";
 import RocketLaunchIcon from "@mui/icons-material/RocketLaunch";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import LockIcon from "@mui/icons-material/Lock";
 import Layout from "../components/Layout/Layout";
 import StatusChip from "../components/common/StatusChip";
 import EmptyState from "../components/common/EmptyState";
@@ -53,13 +54,22 @@ export default function ProjectDetail() {
                 <StatusChip status={project.status} />
               </Box>
             </Box>
-            <Button
-              variant="contained"
-              startIcon={<RocketLaunchIcon />}
-              onClick={() => navigate(`/projects/${id}/deploy`)}
-            >
-              New Deployment
-            </Button>
+            <Box sx={{ display: "flex", gap: 1 }}>
+              <Button
+                variant="outlined"
+                startIcon={<LockIcon />}
+                onClick={() => navigate(`/projects/${id}/secrets`)}
+              >
+                Secrets
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={<RocketLaunchIcon />}
+                onClick={() => navigate(`/projects/${id}/deploy`)}
+              >
+                New Deployment
+              </Button>
+            </Box>
           </Box>
         </CardContent>
       </Card>

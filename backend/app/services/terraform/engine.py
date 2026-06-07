@@ -6,6 +6,19 @@ from app.models.project import Project
 from app.services.terraform.workspace import WorkspaceManager
 from app.services.terraform.generator import generate_hcl
 from app.services.terraform import executor
+from app.core.vault import get_vault_client
+from app.services.vault.secrets import read_secrets
+
+
+def _build_aws_env(secrets: dict, region: str) -> dict:
+    env = {"AWS_DEFAULT_REGION": region}
+    if secrets.get("aws_access_key_id"):
+        env["AWS_ACCESS_KEY_ID"] = secrets["aws_access_key_id"]
+    if secrets.get("aws_secret_access_key"):
+        env["AWS_SECRET_ACCESS_KEY"] = secrets["aws_secret_access_key"]
+    if secrets.get("aws_session_token"):
+        env["AWS_SESSION_TOKEN"] = secrets["aws_session_token"]
+    return env
 
 
 async def _update_deployment(
@@ -29,6 +42,15 @@ async def _update_deployment(
     await db.commit()
 
 
+def _get_aws_env(project: Project) -> dict:
+    try:
+        client = get_vault_client()
+        secrets = read_secrets(client, project.id)
+        return _build_aws_env(secrets, project.region)
+    except Exception:
+        return {"AWS_DEFAULT_REGION": project.region}
+
+
 async def run_plan(
     db: AsyncSession,
     deployment_id: uuid.UUID,
@@ -37,13 +59,14 @@ async def run_plan(
 ) -> None:
     workspace = WorkspaceManager(project.id)
     workspace.setup()
+    aws_env = _get_aws_env(project)
 
     hcl = generate_hcl(project.provider.value, project.region, project.name, resources)
     workspace.write_main_tf(hcl)
 
     await _update_deployment(db, deployment_id, DeploymentStatus.running, "Running terraform init...")
 
-    rc, output = await executor.terraform_init(workspace.path)
+    rc, output = await executor.terraform_init(workspace.path, aws_env)
     if rc != 0:
         await _update_deployment(db, deployment_id, DeploymentStatus.failed, output, error_message=output)
         return
@@ -51,7 +74,7 @@ async def run_plan(
     init_logs = output
     await _update_deployment(db, deployment_id, DeploymentStatus.running, init_logs + "\nRunning terraform plan...")
 
-    rc, output = await executor.terraform_plan(workspace.path)
+    rc, output = await executor.terraform_plan(workspace.path, aws_env)
     full_logs = init_logs + "\n" + output
     if rc != 0:
         await _update_deployment(db, deployment_id, DeploymentStatus.failed, full_logs, error_message=output)
@@ -68,13 +91,14 @@ async def run_apply(
 ) -> None:
     workspace = WorkspaceManager(project.id)
     workspace.setup()
+    aws_env = _get_aws_env(project)
 
     hcl = generate_hcl(project.provider.value, project.region, project.name, resources)
     workspace.write_main_tf(hcl)
 
     await _update_deployment(db, deployment_id, DeploymentStatus.running, "Running terraform init...")
 
-    rc, output = await executor.terraform_init(workspace.path)
+    rc, output = await executor.terraform_init(workspace.path, aws_env)
     if rc != 0:
         await _update_deployment(db, deployment_id, DeploymentStatus.failed, output, error_message=output)
         return
@@ -82,7 +106,7 @@ async def run_apply(
     all_logs = output + "\nRunning terraform plan...\n"
     await _update_deployment(db, deployment_id, DeploymentStatus.running, all_logs)
 
-    rc, plan_out = await executor.terraform_plan(workspace.path)
+    rc, plan_out = await executor.terraform_plan(workspace.path, aws_env)
     all_logs += plan_out
     if rc != 0:
         await _update_deployment(db, deployment_id, DeploymentStatus.failed, all_logs, error_message=plan_out)
@@ -91,7 +115,7 @@ async def run_apply(
     all_logs += "\nRunning terraform apply...\n"
     await _update_deployment(db, deployment_id, DeploymentStatus.running, all_logs, plan_output=plan_out)
 
-    rc, apply_out = await executor.terraform_apply(workspace.path)
+    rc, apply_out = await executor.terraform_apply(workspace.path, aws_env)
     all_logs += apply_out
     if rc != 0:
         await _update_deployment(db, deployment_id, DeploymentStatus.failed, all_logs, error_message=apply_out)
@@ -115,9 +139,10 @@ async def run_destroy(
         )
         return
 
+    aws_env = _get_aws_env(project)
     await _update_deployment(db, deployment_id, DeploymentStatus.running, "Running terraform destroy...")
 
-    rc, output = await executor.terraform_destroy(workspace.path)
+    rc, output = await executor.terraform_destroy(workspace.path, aws_env)
     if rc != 0:
         await _update_deployment(db, deployment_id, DeploymentStatus.failed, output, error_message=output)
         return
