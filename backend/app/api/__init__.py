@@ -1,4 +1,4 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from app.api.health import router as health_router
 from app.api.projects import router as projects_router
 from app.api.deployments import router as deployments_router
@@ -9,15 +9,20 @@ from app.api.templates import router as templates_router
 from app.api.variables import router as variables_router
 from app.api.metrics import router as metrics_router
 from app.api.ws import router as ws_router
+from app.api.auth import router as auth_router
+from app.api.deps import get_current_user
+
+_auth = [Depends(get_current_user)]
 
 api_router = APIRouter(prefix="/api/v1")
 api_router.include_router(health_router)
-api_router.include_router(projects_router)
-api_router.include_router(deployments_router)
-api_router.include_router(resources_router)
-api_router.include_router(terraform_router)
-api_router.include_router(vault_router)
-api_router.include_router(templates_router)
-api_router.include_router(variables_router)
-api_router.include_router(metrics_router)
+api_router.include_router(auth_router)
+api_router.include_router(projects_router, dependencies=_auth)
+api_router.include_router(deployments_router, dependencies=_auth)
+api_router.include_router(resources_router, dependencies=_auth)
+api_router.include_router(terraform_router, dependencies=_auth)
+api_router.include_router(vault_router, dependencies=_auth)
+api_router.include_router(templates_router, dependencies=_auth)
+api_router.include_router(variables_router, dependencies=_auth)
+api_router.include_router(metrics_router, dependencies=_auth)
 api_router.include_router(ws_router)

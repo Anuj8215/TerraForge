@@ -5,9 +5,11 @@ import vaultReducer from "./slices/vaultSlice";
 import templatesReducer from "./slices/templatesSlice";
 import variablesReducer from "./slices/variablesSlice";
 import metricsReducer from "./slices/metricsSlice";
+import authReducer from "./slices/authSlice";
 
 export const store = configureStore({
   reducer: {
+    auth: authReducer,
     projects: projectsReducer,
     deployments: deploymentsReducer,
     vault: vaultReducer,
