@@ -1,4 +1,6 @@
-import { Box, TextField, Typography, Switch, FormControlLabel } from "@mui/material";
+import { Box, TextField, MenuItem, Typography, Switch, FormControlLabel } from "@mui/material";
+
+const AWS_REGIONS = ["us-east-1", "us-east-2", "us-west-1", "us-west-2", "eu-west-1", "eu-central-1", "ap-southeast-1", "ap-northeast-1"];
 
 const DEFAULT = {
   bucket_name: "",
@@ -6,7 +8,7 @@ const DEFAULT = {
   force_destroy: false,
 };
 
-export default function S3Form({ config = DEFAULT, onChange }) {
+export default function S3Form({ config = DEFAULT, region = "", onRegionChange, onChange }) {
   const set = (key, value) => onChange({ ...DEFAULT, ...config, [key]: value });
 
   return (
@@ -15,7 +17,7 @@ export default function S3Form({ config = DEFAULT, onChange }) {
       <TextField
         label="Bucket Name" value={config.bucket_name || ""}
         onChange={(e) => set("bucket_name", e.target.value)}
-        helperText="Must be globally unique across all AWS accounts. Leave blank to auto-generate."
+        helperText="Must be globally unique. Leave blank to auto-generate."
       />
       <FormControlLabel
         control={
@@ -38,6 +40,16 @@ export default function S3Form({ config = DEFAULT, onChange }) {
       <Typography variant="caption" color="text.secondary">
         AES-256 server-side encryption and public access block are always enabled.
       </Typography>
+      {onRegionChange && (
+        <TextField
+          select label="Region Override (optional)" value={region}
+          onChange={(e) => onRegionChange(e.target.value)}
+          helperText="Overrides the project default region — triggers a provider alias"
+        >
+          <MenuItem value=""><em>Use project default</em></MenuItem>
+          {AWS_REGIONS.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+        </TextField>
+      )}
     </Box>
   );
 }

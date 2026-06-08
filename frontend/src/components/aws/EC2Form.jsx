@@ -1,6 +1,7 @@
 import { Box, TextField, MenuItem, Typography, Switch, FormControlLabel } from "@mui/material";
 
 const INSTANCE_TYPES = ["t3.micro", "t3.small", "t3.medium", "t3.large", "m5.large", "c5.large"];
+const AWS_REGIONS = ["us-east-1", "us-east-2", "us-west-1", "us-west-2", "eu-west-1", "eu-central-1", "ap-southeast-1", "ap-northeast-1"];
 
 const DEFAULT = {
   instance_type: "t3.micro",
@@ -10,7 +11,7 @@ const DEFAULT = {
   key_name: "",
 };
 
-export default function EC2Form({ config = DEFAULT, onChange }) {
+export default function EC2Form({ config = DEFAULT, region = "", onRegionChange, onChange }) {
   const set = (key, value) => onChange({ ...DEFAULT, ...config, [key]: value });
 
   return (
@@ -46,6 +47,16 @@ export default function EC2Form({ config = DEFAULT, onChange }) {
         }
         label="Associate Public IP"
       />
+      {onRegionChange && (
+        <TextField
+          select label="Region Override (optional)" value={region}
+          onChange={(e) => onRegionChange(e.target.value)}
+          helperText="Overrides the project default region — triggers a provider alias"
+        >
+          <MenuItem value=""><em>Use project default</em></MenuItem>
+          {AWS_REGIONS.map((r) => <MenuItem key={r} value={r}>{r}</MenuItem>)}
+        </TextField>
+      )}
     </Box>
   );
 }

@@ -6,6 +6,7 @@ class ResourceConfig(BaseModel):
     type: str
     name: str
     config: dict = {}
+    region: str | None = None
 
 
 class TerraformPlanRequest(BaseModel):

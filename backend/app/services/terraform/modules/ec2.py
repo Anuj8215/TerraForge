@@ -1,4 +1,4 @@
-def generate(name: str, config: dict, project_name: str) -> str:
+def generate(name: str, config: dict, project_name: str, provider_alias: str | None = None) -> str:
     ami = config.get("ami", "ami-0c55b159cbfafe1f0")
     instance_type = config.get("instance_type", "t3.micro")
     key_name = config.get("key_name", "")
@@ -8,9 +8,11 @@ def generate(name: str, config: dict, project_name: str) -> str:
 
     subnet_block = f'  subnet_id                   = "{subnet_id}"' if subnet_id else ""
     key_block = f'  key_name                    = "{key_name}"' if key_name else ""
+    provider_block = f'  provider = {provider_alias}' if provider_alias else ""
 
     return f"""
 resource "aws_instance" "{name}" {{
+{provider_block}
   ami                         = "{ami}"
   instance_type               = "{instance_type}"
   associate_public_ip_address = {associate_public_ip}
@@ -23,8 +25,8 @@ resource "aws_instance" "{name}" {{
   }}
 
   tags = {{
-    Name    = "{name}"
-    Project = "{project_name}"
+    Name      = "{name}"
+    Project   = "{project_name}"
     ManagedBy = "TerraForge"
   }}
 }}
