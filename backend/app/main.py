@@ -1,15 +1,18 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from app.core.database import engine, Base
+from app.core.database import engine, Base, AsyncSessionLocal
 from app.api import api_router
-import app.models  # noqa: F401 — registers all ORM models with Base.metadata
+from app.core.seed import seed_builtin_templates
+import app.models  # noqa: F401
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    async with AsyncSessionLocal() as db:
+        await seed_builtin_templates(db)
     yield
     await engine.dispose()
 

@@ -8,6 +8,8 @@ import {
 import DeleteIcon from "@mui/icons-material/Delete";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import PublicIcon from "@mui/icons-material/Public";
+import BookmarkIcon from "@mui/icons-material/Bookmark";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import Layout from "../components/Layout/Layout";
 import ServiceSelector from "../components/aws/ServiceSelector";
 import EC2Form from "../components/aws/EC2Form";
@@ -15,7 +17,9 @@ import S3Form from "../components/aws/S3Form";
 import VPCForm from "../components/aws/VPCForm";
 import AzureForm from "../components/aws/AzureForm";
 import GCPForm from "../components/aws/GCPForm";
+import SaveTemplateDialog from "../components/templates/SaveTemplateDialog";
 import { fetchProject } from "../store/slices/projectsSlice";
+import { fetchTemplates } from "../store/slices/templatesSlice";
 import { triggerPlan, triggerApply } from "../store/slices/deploymentsSlice";
 
 const FORM_MAP = { ec2: EC2Form, s3: S3Form, vpc: VPCForm, azure: AzureForm, gcp: GCPForm };
@@ -33,19 +37,35 @@ export default function NewDeployment() {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { current: project } = useSelector((s) => s.projects);
+  const { items: templates } = useSelector((s) => s.templates);
 
   const [step, setStep] = useState(0);
   const [resources, setResources] = useState([]);
   const [deploying, setDeploying] = useState(false);
   const [error, setError] = useState(null);
+  const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
 
-  useEffect(() => { dispatch(fetchProject(id)); }, [id, dispatch]);
+  useEffect(() => {
+    dispatch(fetchProject(id));
+    dispatch(fetchTemplates());
+  }, [id, dispatch]);
 
   const addResource = (type) => {
     setResources((prev) => [
       ...prev,
       { type, name: `${type}_${prev.filter((r) => r.type === type).length + 1}`, config: { ...DEFAULT_MAP[type] }, region: "" },
     ]);
+    setStep(1);
+  };
+
+  const loadFromTemplate = (template) => {
+    const loaded = template.resources.map((r, i) => ({
+      type: r.type,
+      name: r.name || `${r.type}_${i + 1}`,
+      config: { ...(DEFAULT_MAP[r.type] || {}), ...(r.config || {}) },
+      region: r.region || "",
+    }));
+    setResources(loaded);
     setStep(1);
   };
 
@@ -84,7 +104,9 @@ export default function NewDeployment() {
     }
   };
 
-  const awsProvider = project?.provider === "aws";
+  const relevantTemplates = templates.filter(
+    (t) => !project?.provider || t.provider === project.provider
+  );
 
   return (
     <Layout title="New Deployment">
@@ -100,6 +122,30 @@ export default function NewDeployment() {
 
       {step === 0 && (
         <Box>
+          {relevantTemplates.length > 0 && (
+            <Card sx={{ mb: 3, border: "1px solid", borderColor: "primary.dark" }}>
+              <CardContent>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
+                  <AutoAwesomeIcon color="primary" fontSize="small" />
+                  <Typography variant="subtitle2" fontWeight={600}>Load from Template</Typography>
+                </Box>
+                <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                  {relevantTemplates.map((t) => (
+                    <Chip
+                      key={t.id}
+                      label={t.name}
+                      onClick={() => loadFromTemplate(t)}
+                      clickable
+                      color="primary"
+                      variant="outlined"
+                      size="small"
+                    />
+                  ))}
+                </Box>
+              </CardContent>
+            </Card>
+          )}
+
           <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>Choose Services</Typography>
           <ServiceSelector onSelect={addResource} projectProvider={project?.provider} />
           {resources.length > 0 && (
@@ -196,8 +242,16 @@ export default function NewDeployment() {
 
           {error && <Alert severity="error">{error}</Alert>}
 
-          <Box sx={{ display: "flex", gap: 2 }}>
+          <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
             <Button onClick={() => setStep(1)}>← Back</Button>
+            <Button
+              variant="outlined"
+              startIcon={<BookmarkIcon />}
+              onClick={() => setSaveTemplateOpen(true)}
+            >
+              Save as Template
+            </Button>
+            <Box sx={{ flexGrow: 1 }} />
             <Button
               variant="outlined" onClick={() => handleDeploy("plan")} disabled={deploying}
               startIcon={deploying && <CircularProgress size={14} />}
@@ -213,6 +267,14 @@ export default function NewDeployment() {
           </Box>
         </Box>
       )}
+
+      <SaveTemplateDialog
+        open={saveTemplateOpen}
+        onClose={() => setSaveTemplateOpen(false)}
+        resources={resources}
+        provider={project?.provider || "aws"}
+        region={project?.region || "us-east-1"}
+      />
     </Layout>
   );
 }

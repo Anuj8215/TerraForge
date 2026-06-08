@@ -8,6 +8,8 @@ from app.services.terraform.generator import generate_hcl
 from app.services.terraform import executor
 from app.core.vault import get_vault_client
 from app.services.vault.secrets import read_secrets
+from app.models.variable import Variable
+from app.services.terraform.variables import generate_variables_tf
 
 
 def _build_aws_env(secrets: dict, region: str) -> dict:
@@ -42,6 +44,21 @@ async def _update_deployment(
     await db.commit()
 
 
+async def _write_variables(db: AsyncSession, project_id: uuid.UUID, workspace: WorkspaceManager) -> None:
+    result = await db.execute(select(Variable).where(Variable.project_id == project_id))
+    variables = result.scalars().all()
+    if variables:
+        var_dicts = [
+            {
+                "name": v.name, "type": v.type.value, "description": v.description,
+                "default_value": v.default_value, "validation_condition": v.validation_condition,
+                "validation_message": v.validation_message, "is_sensitive": v.is_sensitive,
+            }
+            for v in variables
+        ]
+        workspace.write_variables_tf(generate_variables_tf(var_dicts))
+
+
 def _get_aws_env(project: Project) -> dict:
     try:
         client = get_vault_client()
@@ -60,6 +77,7 @@ async def run_plan(
     workspace = WorkspaceManager(project.id)
     workspace.setup()
     aws_env = _get_aws_env(project)
+    await _write_variables(db, project.id, workspace)
 
     hcl = generate_hcl(project.provider.value, project.region, project.name, resources)
     workspace.write_main_tf(hcl)
@@ -92,6 +110,7 @@ async def run_apply(
     workspace = WorkspaceManager(project.id)
     workspace.setup()
     aws_env = _get_aws_env(project)
+    await _write_variables(db, project.id, workspace)
 
     hcl = generate_hcl(project.provider.value, project.region, project.name, resources)
     workspace.write_main_tf(hcl)
