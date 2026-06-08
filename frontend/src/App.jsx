@@ -8,6 +8,7 @@ import NewDeployment from "./pages/NewDeployment";
 import Secrets from "./pages/Secrets";
 import Templates from "./pages/Templates";
 import VariableEditor from "./pages/VariableEditor";
+import Resources from "./pages/Resources";
 import NotFound from "./pages/NotFound";
 
 export default function App() {
@@ -22,6 +23,7 @@ export default function App() {
       <Route path="/deployments" element={<Deployments />} />
       <Route path="/deployments/:id" element={<DeploymentDetail />} />
       <Route path="/templates" element={<Templates />} />
+      <Route path="/resources" element={<Resources />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

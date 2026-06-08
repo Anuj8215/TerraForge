@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import {
@@ -6,10 +6,12 @@ import {
   Button, Chip,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import WifiIcon from "@mui/icons-material/Wifi";
 import Layout from "../components/Layout/Layout";
 import StatusChip from "../components/common/StatusChip";
 import { fetchDeployment, updateDeploymentInList } from "../store/slices/deploymentsSlice";
-import { deploymentsApi } from "../api/deployments";
+
+const TERMINAL = new Set(["success", "failed"]);
 
 export default function DeploymentDetail() {
   const { id } = useParams();
@@ -17,7 +19,9 @@ export default function DeploymentDetail() {
   const navigate = useNavigate();
   const { current: deployment } = useSelector((s) => s.deployments);
   const logsEndRef = useRef(null);
-  const pollRef = useRef(null);
+  const wsRef = useRef(null);
+  const [streamedLogs, setStreamedLogs] = useState("");
+  const [wsConnected, setWsConnected] = useState(false);
 
   useEffect(() => {
     dispatch(fetchDeployment(id));
@@ -25,21 +29,40 @@ export default function DeploymentDetail() {
 
   useEffect(() => {
     if (!deployment) return;
-    if (deployment.status === "running" || deployment.status === "pending") {
-      pollRef.current = setInterval(async () => {
-        const res = await deploymentsApi.get(id);
-        dispatch(updateDeploymentInList(res.data));
-        if (res.data.status !== "running" && res.data.status !== "pending") {
-          clearInterval(pollRef.current);
-        }
-      }, 2000);
+    if (TERMINAL.has(deployment.status)) {
+      setStreamedLogs(deployment.logs || "");
+      return;
     }
-    return () => clearInterval(pollRef.current);
-  }, [deployment?.status, id, dispatch]);
+
+    const proto = window.location.protocol === "https:" ? "wss" : "ws";
+    const wsUrl = `${proto}://${window.location.host}/api/v1/ws/deployments/${id}/logs`;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => setWsConnected(true);
+
+    ws.onmessage = (e) => {
+      setStreamedLogs((prev) => prev + e.data);
+    };
+
+    ws.onclose = () => {
+      setWsConnected(false);
+      dispatch(fetchDeployment(id));
+    };
+
+    ws.onerror = () => {
+      setWsConnected(false);
+    };
+
+    return () => {
+      ws.close();
+      wsRef.current = null;
+    };
+  }, [deployment?.id, deployment?.status, id, dispatch]);
 
   useEffect(() => {
     logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [deployment?.logs]);
+  }, [streamedLogs]);
 
   if (!deployment) return (
     <Layout title="Deployment Detail">
@@ -47,7 +70,8 @@ export default function DeploymentDetail() {
     </Layout>
   );
 
-  const isLive = deployment.status === "running" || deployment.status === "pending";
+  const isLive = !TERMINAL.has(deployment.status);
+  const displayLogs = streamedLogs || deployment.logs || "";
 
   return (
     <Layout title="Deployment Detail">
@@ -61,6 +85,15 @@ export default function DeploymentDetail() {
             <Chip label={deployment.action} variant="outlined" />
             <StatusChip status={deployment.status} size="medium" />
             {isLive && <CircularProgress size={18} />}
+            {wsConnected && (
+              <Chip
+                icon={<WifiIcon />}
+                label="Live"
+                size="small"
+                color="success"
+                variant="outlined"
+              />
+            )}
             <Typography variant="caption" color="text.secondary">
               {new Date(deployment.created_at).toLocaleString()}
             </Typography>
@@ -68,19 +101,24 @@ export default function DeploymentDetail() {
         </CardContent>
       </Card>
 
-      {deployment.logs && (
+      {displayLogs && (
         <Card>
           <CardContent>
-            <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>Execution Logs</Typography>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
+              <Typography variant="subtitle2" fontWeight={600}>Execution Logs</Typography>
+              {isLive && wsConnected && (
+                <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: "success.main", animation: "pulse 1.5s infinite" }} />
+              )}
+            </Box>
             <Box
               sx={{
                 bgcolor: "#0d1117", borderRadius: 1, p: 2,
-                maxHeight: 500, overflow: "auto",
+                maxHeight: 540, overflow: "auto",
                 fontFamily: "monospace", fontSize: 12,
                 color: "#c9d1d9", whiteSpace: "pre-wrap", wordBreak: "break-all",
               }}
             >
-              {deployment.logs}
+              {displayLogs}
               <div ref={logsEndRef} />
             </Box>
           </CardContent>

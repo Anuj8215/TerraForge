@@ -7,6 +7,7 @@ from app.services.terraform.workspace import WorkspaceManager
 from app.services.terraform.generator import generate_hcl
 from app.services.terraform import executor
 from app.core.vault import get_vault_client
+from app.core.redis_client import get_redis
 from app.services.vault.secrets import read_secrets
 from app.models.variable import Variable
 from app.services.terraform.variables import generate_variables_tf
@@ -68,6 +69,16 @@ def _get_aws_env(project: Project) -> dict:
         return {"AWS_DEFAULT_REGION": project.region}
 
 
+def _make_pusher(deployment_id: uuid.UUID):
+    redis = get_redis()
+    key = f"deployment:{deployment_id}:logs"
+
+    async def push(line: str) -> None:
+        await redis.rpush(key, line.encode("utf-8"))
+
+    return push
+
+
 async def run_plan(
     db: AsyncSession,
     deployment_id: uuid.UUID,
@@ -82,18 +93,22 @@ async def run_plan(
     hcl = generate_hcl(project.provider.value, project.region, project.name, resources)
     workspace.write_main_tf(hcl)
 
-    await _update_deployment(db, deployment_id, DeploymentStatus.running, "Running terraform init...")
+    push = _make_pusher(deployment_id)
+    await _update_deployment(db, deployment_id, DeploymentStatus.running, "Running terraform init...\n")
+    await push("Running terraform init...\n")
 
-    rc, output = await executor.terraform_init(workspace.path, aws_env)
+    rc, output = await executor.terraform_init(workspace.path, aws_env, on_line=push)
     if rc != 0:
         await _update_deployment(db, deployment_id, DeploymentStatus.failed, output, error_message=output)
         return
 
     init_logs = output
-    await _update_deployment(db, deployment_id, DeploymentStatus.running, init_logs + "\nRunning terraform plan...")
+    separator = "\nRunning terraform plan...\n"
+    await push(separator)
+    await _update_deployment(db, deployment_id, DeploymentStatus.running, init_logs + separator)
 
-    rc, output = await executor.terraform_plan(workspace.path, aws_env)
-    full_logs = init_logs + "\n" + output
+    rc, output = await executor.terraform_plan(workspace.path, aws_env, on_line=push)
+    full_logs = init_logs + separator + output
     if rc != 0:
         await _update_deployment(db, deployment_id, DeploymentStatus.failed, full_logs, error_message=output)
         return
@@ -115,27 +130,32 @@ async def run_apply(
     hcl = generate_hcl(project.provider.value, project.region, project.name, resources)
     workspace.write_main_tf(hcl)
 
-    await _update_deployment(db, deployment_id, DeploymentStatus.running, "Running terraform init...")
+    push = _make_pusher(deployment_id)
+    await push("Running terraform init...\n")
+    await _update_deployment(db, deployment_id, DeploymentStatus.running, "Running terraform init...\n")
 
-    rc, output = await executor.terraform_init(workspace.path, aws_env)
+    rc, output = await executor.terraform_init(workspace.path, aws_env, on_line=push)
     if rc != 0:
         await _update_deployment(db, deployment_id, DeploymentStatus.failed, output, error_message=output)
         return
 
-    all_logs = output + "\nRunning terraform plan...\n"
-    await _update_deployment(db, deployment_id, DeploymentStatus.running, all_logs)
+    all_logs = output
+    sep1 = "\nRunning terraform plan...\n"
+    await push(sep1)
+    await _update_deployment(db, deployment_id, DeploymentStatus.running, all_logs + sep1)
 
-    rc, plan_out = await executor.terraform_plan(workspace.path, aws_env)
-    all_logs += plan_out
+    rc, plan_out = await executor.terraform_plan(workspace.path, aws_env, on_line=push)
+    all_logs += sep1 + plan_out
     if rc != 0:
         await _update_deployment(db, deployment_id, DeploymentStatus.failed, all_logs, error_message=plan_out)
         return
 
-    all_logs += "\nRunning terraform apply...\n"
-    await _update_deployment(db, deployment_id, DeploymentStatus.running, all_logs, plan_output=plan_out)
+    sep2 = "\nRunning terraform apply...\n"
+    await push(sep2)
+    await _update_deployment(db, deployment_id, DeploymentStatus.running, all_logs + sep2, plan_output=plan_out)
 
-    rc, apply_out = await executor.terraform_apply(workspace.path, aws_env)
-    all_logs += apply_out
+    rc, apply_out = await executor.terraform_apply(workspace.path, aws_env, on_line=push)
+    all_logs += sep2 + apply_out
     if rc != 0:
         await _update_deployment(db, deployment_id, DeploymentStatus.failed, all_logs, error_message=apply_out)
         return
@@ -159,9 +179,11 @@ async def run_destroy(
         return
 
     aws_env = _get_aws_env(project)
-    await _update_deployment(db, deployment_id, DeploymentStatus.running, "Running terraform destroy...")
+    push = _make_pusher(deployment_id)
+    await push("Running terraform destroy...\n")
+    await _update_deployment(db, deployment_id, DeploymentStatus.running, "Running terraform destroy...\n")
 
-    rc, output = await executor.terraform_destroy(workspace.path, aws_env)
+    rc, output = await executor.terraform_destroy(workspace.path, aws_env, on_line=push)
     if rc != 0:
         await _update_deployment(db, deployment_id, DeploymentStatus.failed, output, error_message=output)
         return

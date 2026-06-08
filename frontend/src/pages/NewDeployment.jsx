@@ -10,6 +10,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import PublicIcon from "@mui/icons-material/Public";
 import BookmarkIcon from "@mui/icons-material/Bookmark";
 import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
+import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import Layout from "../components/Layout/Layout";
 import ServiceSelector from "../components/aws/ServiceSelector";
 import EC2Form from "../components/aws/EC2Form";
@@ -21,6 +22,7 @@ import SaveTemplateDialog from "../components/templates/SaveTemplateDialog";
 import { fetchProject } from "../store/slices/projectsSlice";
 import { fetchTemplates } from "../store/slices/templatesSlice";
 import { triggerPlan, triggerApply } from "../store/slices/deploymentsSlice";
+import { metricsApi } from "../api/metrics";
 
 const FORM_MAP = { ec2: EC2Form, s3: S3Form, vpc: VPCForm, azure: AzureForm, gcp: GCPForm };
 const DEFAULT_MAP = {
@@ -44,6 +46,7 @@ export default function NewDeployment() {
   const [deploying, setDeploying] = useState(false);
   const [error, setError] = useState(null);
   const [saveTemplateOpen, setSaveTemplateOpen] = useState(false);
+  const [costEstimate, setCostEstimate] = useState(null);
 
   useEffect(() => {
     dispatch(fetchProject(id));
@@ -79,6 +82,15 @@ export default function NewDeployment() {
 
   const uniqueRegions = [...new Set(resources.map((r) => r.region).filter(Boolean))];
   const isMultiRegion = uniqueRegions.length > 0;
+
+  const fetchEstimate = async (resourceList) => {
+    try {
+      const res = await metricsApi.estimate(resourceList.map((r) => ({ type: r.type, name: r.name, config: r.config })));
+      setCostEstimate(res.data);
+    } catch {
+      setCostEstimate(null);
+    }
+  };
 
   const buildPayload = () => ({
     project_id: id,
@@ -201,7 +213,11 @@ export default function NewDeployment() {
 
           <Box sx={{ display: "flex", gap: 2 }}>
             <Button onClick={() => setStep(0)}>← Add More Services</Button>
-            <Button variant="contained" onClick={() => setStep(2)} disabled={resources.length === 0}>
+            <Button
+              variant="contained"
+              onClick={() => { setStep(2); fetchEstimate(resources); }}
+              disabled={resources.length === 0}
+            >
               Review →
             </Button>
           </Box>
@@ -239,6 +255,36 @@ export default function NewDeployment() {
               ))}
             </CardContent>
           </Card>
+
+          {costEstimate && (
+            <Card sx={{ border: "1px solid", borderColor: "primary.dark" }}>
+              <CardContent>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1.5 }}>
+                  <AttachMoneyIcon color="primary" fontSize="small" />
+                  <Typography variant="subtitle2" fontWeight={600}>Cost Estimate</Typography>
+                  <Chip label="estimate only" size="small" variant="outlined" sx={{ fontSize: 10 }} />
+                </Box>
+                {costEstimate.breakdown.map((b, i) => (
+                  <Box key={i} sx={{ display: "flex", justifyContent: "space-between", py: 0.5 }}>
+                    <Typography variant="body2" color="text.secondary">{b.type} / {b.name}</Typography>
+                    <Typography variant="body2" fontFamily="monospace">
+                      ${b.monthly_usd.toFixed(2)}/mo
+                    </Typography>
+                  </Box>
+                ))}
+                <Divider sx={{ my: 1.5 }} />
+                <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                  <Typography variant="body2" fontWeight={600}>Total</Typography>
+                  <Typography variant="body2" fontWeight={700} color="primary.light">
+                    ${costEstimate.monthly_usd.toFixed(2)}/mo · ${costEstimate.annual_usd.toFixed(2)}/yr
+                  </Typography>
+                </Box>
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+                  {costEstimate.disclaimer}
+                </Typography>
+              </CardContent>
+            </Card>
+          )}
 
           {error && <Alert severity="error">{error}</Alert>}
 
